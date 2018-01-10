@@ -1,0 +1,114 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>EthereumJS VM - Browser Example</title>
+</head>
+
+<body>
+  <script src="../dist/ethereumjs-vm/ethereumjs-vm-2.3.1.js"></script>
+
+  <script>
+    var vm = new ethereumjs.VM()
+
+    var code = '7f4e616d65526567000000000000000000000000000000000000000000000000003055307f4e616d6552656700000000000000000000000000000000000000000000000000557f436f6e666967000000000000000000000000000000000000000000000000000073661005d2720d855f1d9976f88bb10c1a3398c77f5573661005d2720d855f1d9976f88bb10c1a3398c77f7f436f6e6669670000000000000000000000000000000000000000000000000000553360455560df806100c56000396000f3007f726567697374657200000000000000000000000000000000000000000000000060003514156053576020355415603257005b335415603e5760003354555b6020353360006000a233602035556020353355005b60007f756e72656769737465720000000000000000000000000000000000000000000060003514156082575033545b1560995733335460006000a2600033545560003355005b60007f6b696c6c00000000000000000000000000000000000000000000000000000000600035141560cb575060455433145b1560d25733ff5b6000355460005260206000f3'
+
+    console.log('Code to be run in the VM:')
+    console.log(code)
+
+    vm.on('step', function (data) {
+      console.log(data.opcode.name)
+    })
+
+    vm.runCode({
+      code: ethereumjs.Buffer.Buffer.from(code, 'hex'),
+      gasLimit: ethereumjs.Buffer.Buffer.from('ffffffff', 'hex')
+    }, function (err, results) {
+      console.log('returned: ' + results.return.toString('hex'))
+      console.log('gasUsed: ' + results.gasUsed.toString())
+      console.log(err)
+    })
+
+        // create a blank transaction
+    var tx = new ethereumjs.Tx(null, 1) // mainnet Tx EIP155
+
+    // So now we have created a blank transaction but Its not quiet valid yet. We
+    // need to add some things to it. Lets start:
+    // notice we don't set the `to` field because we are creating a new contract.
+
+    tx.nonce = 2
+    tx.gasPrice = 100
+    tx.gasLimit = 1000
+    tx.value = 120
+    tx.to = '0x1f36f546477cda21bf2296c50976f2740247906f';
+    // tx.data = '0x7f4e616d65526567000000000000000000000000000000000000000000000000003057307f4e616d6552656700000000000000000000000000000000000000000000000000573360455760415160566000396000f20036602259604556330e0f600f5933ff33560f601e5960003356576000335700604158600035560f602b590033560f60365960003356573360003557600035335700'
+
+    var privateKey = new ethereumjs.Buffer.Buffer('e331b6d69882b4cb4ea581d88e0b604039a3de5967688d3dcffdd2270c0fd109', 'hex')
+    tx.sign(privateKey, {"nonce":function(args){
+      return 1;
+    }})
+    // We have a signed transaction, Now for it to be fully fundable the account that we signed
+    // it with needs to have a certain amount of wei in to. To see how much this
+    // account needs we can use the getUpfrontCost() method.
+    var feeCost = tx.getUpfrontCost()
+    tx.gas = feeCost
+    console.log('Total Amount of wei needed:' + feeCost.toString())
+
+
+    var d = ethereumjs.ABI.rawEncode(["uint256"], ["0x01"])
+    //https://ethereum.stackexchange.com/questions/22884/convert-contract-arguments-from-json-to-abi-encoded-format
+    console.log("ABI parameter encoding test:" + d.toString("hex"));
+    // if your wondering how that is caculated it is
+    // bytes(data length) * 5
+    // + 500 Default transaction fee
+    // + gasAmount * gasPrice
+
+    // lets serialize the transaction
+
+    console.log('---Serialized TX----')
+    console.log(tx.serialize().toString('hex'))
+    console.log('--------------------')
+
+    // Now that we have the serialized transaction we can get AlethZero to except by
+    // selecting debug>inject transaction and pasting the transaction serialization and
+    // it should show up in pending transaction.
+
+    // Parsing & Validating transactions
+    // If you have a transaction that you want to verify you can parse it. If you got
+    // it directly from the network it will be rlp encoded. You can decode you the rlp
+    // module. After that you should have something like
+    var rawTx = [
+      '0x00',
+      '0x09184e72a000',
+      '0x2710',
+      '0x0000000000000000000000000000000000000000',
+      '0x00',
+      '0x7f7465737432000000000000000000000000000000000000000000000000000000600057',
+      '0x1c',
+      '0x5e1d3a76fbf824220eafc8c79ad578ad2b67d01b0c2425eb1f1347e8f50882ab',
+      '0x5bd428537f05f9830e93792f90ea6a3e2d1ee84952dd96edbae9f658f831ab13'
+    ]
+
+    var tx2 = new ethereumjs.Tx(rawTx)
+
+    // Note rlp.decode will actully produce an array of buffers `new Transaction` will
+    // take either an array of buffers or an array of hex strings.
+    // So assuming that you were able to parse the tranaction, we will now get the sender's
+    // address
+
+    console.log('Senders Address: ' + tx2.getSenderAddress().toString('hex'))
+
+    // Cool now we know who sent the tx! Lets verfy the signature to make sure it was not
+    // some poser.
+
+    if (tx2.verifySignature()) {
+      console.log('Signature Checks out!')
+    }
+
+    // And hopefully its verified. For the transaction to be totally valid we would
+    // also need to check the account of the sender and see if they have at least
+    // `TotalFee`.
+  </script>
+</body>
+</html>
